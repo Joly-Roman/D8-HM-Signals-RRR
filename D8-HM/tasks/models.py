@@ -41,7 +41,7 @@ class TodoItem(models.Model):
     priority = models.IntegerField(
         "Приоритет", choices=PRIORITY_CHOICES, default=PRIORITY_MEDIUM
     )
-    category = models.ManyToManyField(Category, blank=True)
+    category = models.ManyToManyField(Category, blank=True, related_name='items')
 
     class Meta:
         verbose_name = 'Задача'
@@ -60,13 +60,19 @@ def pre_update_model(sender, **kwargs):
     if not kwargs['update_fields'] and kwargs['instance'].pk:
         # Save it so it can be used in post_save
         kwargs['instance'].old = TodoItem.objects.get(pk=kwargs['instance'].pk)
+        old_cats = kwargs['instance'].old.category.all()
+        for cat in old_cats:
+            print('Пытаюсь нати старые категории',cat.name)
+
+
 
 # Сигнал,проверяющий изменение поля Приоритет
 @receiver(post_save, sender=TodoItem)
 def update_model(sender, **kwargs):
     instance = kwargs['instance']
 
-    # Add updated_fields, from old instance, so the method logic remains unchanged
+
+    # Проверяет,изменился ли приоритет
     if not kwargs['update_fields'] and hasattr(instance, 'old'):
         kwargs['update_fields'] = []
         if (instance.priority !=
@@ -76,9 +82,10 @@ def update_model(sender, **kwargs):
     try:
         if 'priority' in kwargs['update_fields']:
             print(kwargs['update_fields'], ' is changed')
-            category = instance.category.get()
-            category.priority_count += 1
-            category.save()
+            categories = instance.category.all()
+            for category in categories:
+                category.priority_count += 1
+                category.save()
     except TypeError:
         pass
 
@@ -86,12 +93,14 @@ def update_model(sender, **kwargs):
 # Сигнал при удалении задачи
 @receiver(pre_delete, sender=TodoItem)
 def reduce_if_item_is_deleted(instance, **kwargs):
-    category = instance.category.get()
-    if category.todos_count > 0:
-        category.todos_count -= 1
-    if category.priority_count > 0:
-        category.priority_count -= 1
-    category.save()
+    categories = instance.category.all()
+    for category in categories:
+
+        if category.todos_count > 0:
+            category.todos_count -= 1
+        if category.priority_count > 0:
+            category.priority_count -= 1
+        category.save()
 
 
 
